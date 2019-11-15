@@ -99,12 +99,13 @@
         //构造概览内容 —— 项目管理
         on_project_show: function () {
             $('.page_project').addClass('active').siblings().removeClass('active');
-            var rdata = [0, 1, 2, 3];
-            var _html = '';
-            for (var i = rdata.length - 1; i >= 0; i--) {
-                _html += this.project._gen_line(rdata[i]);
-            }
-            $('.project_list').html(_html);
+            plugs.api.get_project(function (res) {
+                var _html = '';
+                for (var i = res.length - 1; i >= 0; i--) {
+                    _html += plugs.project._gen_line(res[i]);
+                }
+                $('.project_list').html(_html);
+            });
         },
 
         //构造概览内容 —— 环境管理
@@ -126,8 +127,29 @@
         },
 
         project: {
-            _gen_line: function () {
-                return '<tr><td>1</td><td>2</td><td>3</td></tr>'
+            info: {
+                pjname: '',
+                path: '',
+                rfile: '',
+                framework: '',
+                version: '',
+                port: '',
+                rtype: '',
+                install_module: false
+            },
+            _gen_line: function (project) {
+                return '<tr>' +
+                    '<td>' + project.name + '</td>' +
+                    '<td>' + project.path + '</td>' +
+                    '<td>' + project.port + '</td>' +
+                    '<td>' + project.start + '</td>' +
+                    '<td>' + project.version + '</td>' +
+                    '<td>' + project.cpu + '</td>' +
+                    '<td>' + project.memory + '</td>' +
+                    '<td>' + project.state + '</td>' +
+                    '<td>' + project.startup + '</td>' +
+                    '<td>' + project.option + '</td>' +
+                    '</tr>'
             },
             on_btn_add_click: function () {
                 plugs.api.get_python_version(function (res) {
@@ -193,16 +215,110 @@
         <li>项目日志需要在项目内定位到 /项目目录/logs/error.log 否则无法获取日志</li>\
         <li>自定义启动的项目路径需要填写完整路径</li>\
     </ul>\
-</div>'
+</div>',
+                        yes: function (index, layero) {
+                            plugs.project.info = {
+                                pjname: $('[name="pjname"]').val(), //项目名称
+                                path: $('[name="path"]').val(), //项目路径
+                                version: $('[name="version"]').val(), //版本号
+                                framework: $('[name="framework"]').val(),
+                                rfile: $('[name="rtype"]').val() == 'customize' ? $('[name="rfile"]')[1].value : $('[name="rfile"]')[0].value,
+                                rtype: $('[name="rtype"]').val(),
+                                port: $('[name="port"]').val(),
+                                install_module: $('[name="install_module"]').prop('checked') ? 1 : 0,
+                                auto_start: $('[name="auto_start"]').prop('checked') ? 1 : 0,
+                            };
+
+                            for (var i in plugs.project.info) {
+                                if (plugs.project.info[i] === '' && i != 'port') {
+                                    if (i == 'pjname') {
+                                        layer.msg('项目名称不能为空');
+                                    } else if (i == 'path') {
+                                        layer.msg('项目地址不能为空');
+                                    }
+                                    return false;
+                                }
+                            }
+                            plugs.api.add_project(plugs.project.info, function (res) {
+                                if (res.status) {
+                                    layer.close(index);
+                                    // _this.create_project_table(function () {
+                                    //     layer.msg(res.msg, {icon: 1});
+                                    // });
+                                } else {
+                                    layer.msg(res.msg, {icon: 2});
+                                }
+                            })
+                        }
                     });
                 });
             }
         },
         api: {
-            send: function () {
+            send: function (obj) {
+                var loadT = '';
+                if (obj.load == undefined) obj.load = 0;
+                if (obj.url == undefined) {
+                    if (obj.plugin_name === undefined && this.plugin_name !== undefined) obj.plugin_name = this.plugin_name
+                    if (!obj.plugin_name || !obj.method) {
+                        layer.msg('插件类名称，或插件方法名称缺失!', {
+                            icon: 2
+                        });
+                        return false;
+                    }
+                }
+                if (obj.load === 0) {
+                    loadT = layer.msg(obj.tips, {
+                        icon: 16,
+                        time: 0,
+                        shade: 0.3
+                    });
+                } else if (obj.load === 1 || (obj.tips == undefined && obj.load == undefined)) {
+                    loadT = layer.load();
+                }
+                $.ajax({
+                    type: 'POST',
+                    url: obj.url != undefined ? obj.url : ('/plugin?action=a&name=' + obj.plugin_name + '&s=' + obj.method),
+                    data: obj.data || {},
+                    timeout: obj.timeout || 99999999,
+                    complete: function (res) {
+                        if (obj.load === 0 || obj.load === 1) layer.close(loadT);
+                    },
+                    success: function (rdata) {
+                        if (!obj.success) {
+                            obj.msg || obj.msg == undefined ? layer.msg(rdata.msg, {icon: rdata.status ? 1 : 2}) : '';
+                            return;
+                        }
+                        obj.success(rdata);
+                    },
+                    error: function (ex) {
+                        if (!obj.error) {
+                            obj.msg || obj.msg == undefined ? layer.msg('请求过程发现错误!', {icon: 2}) : '';
+                            return;
+                        }
+                        return obj.error(ex);
+                    }
+                });
+            },
+            get_project: function (callback) {
+                callback([{
+                    name: 'name',
+                    path: 'path',
+                    port: 'port',
+                    start: 'start',
+                    version: 'version',
+                    cpu: 'cpu',
+                    memory: 'memory',
+                    state: 'state',
+                    startup: 'startup',
+                    option: 'option'
+                }]);
             },
             get_python_version: function (callback) {
-                callback([]);
+                callback(['3.6', '3.7', '3.8']);
+            },
+            add_project: function (info, callback) {
+
             }
         },
         io: {
